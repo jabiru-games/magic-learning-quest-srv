@@ -1,0 +1,20 @@
+# Serveur de duels derrière Caddy, qui obtient et renouvelle le certificat TLS.
+# Prérequis : le nom de domaine pointe vers ce serveur, ports 80 et 443 ouverts.
+# Lancer depuis ce dossier : docker compose up -d --build
+services:
+  duels:
+    build: ..
+    restart: unless-stopped
+    environment:
+      ALLOWED_ORIGINS: https://stevencayla.github.io
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+volumes:
+  caddy_data:

@@ -130,7 +130,7 @@ test('défi : invitation, refus, annulation, délai et joueur occupé', () => {
   lobby.receive(maya.id, { t: 'challenge', to: leo.id, mode: 'math' });
   assert.equal(leo.last('invite').from.name, 'Maya');
 });
-test('duel : questions sans réponse, validation côté serveur et dégâts simultanés', () => {
+test('duel : questions sans réponse, validation côté serveur et course au premier sort', () => {
   const { lobby, lina, leo, advance } = duel();
   assert.equal(lina.last('duel-start').rival.name, 'Léo');
   assert.equal(lina.last('players').list[0].busy, true);
@@ -138,37 +138,46 @@ test('duel : questions sans réponse, validation côté serveur et dégâts simu
   assert.equal(question.n, 1);
   assert.equal('answer' in question.exercise, false);
   assert.equal(question.exercise.limit, 30);
-  lobby.receive(lina.id, { t: 'answer', n: 1, value: RIGHT });
-  assert.equal(leo.last('rival-answered').t, 'rival-answered');
-  assert.equal(lina.last('round-result'), undefined);
+  // A miss locks the player out; the other mage can still win the round.
   lobby.receive(lina.id, { t: 'answer', n: 1, value: WRONG });
+  assert.equal(leo.last('rival-missed').t, 'rival-missed');
+  assert.equal(lina.last('round-result'), undefined);
+  lobby.receive(lina.id, { t: 'answer', n: 1, value: RIGHT });
+  assert.equal(lina.last('round-result'), undefined);
   advance(20000);
   lobby.receive(leo.id, { t: 'answer', n: 1, value: RIGHT });
   const mine = lina.last('round-result'),
     theirs = leo.last('round-result');
   assert.deepEqual(
-    [mine.you.correct, mine.you.fast, mine.you.dealt, mine.you.health],
-    [true, true, 25, 80],
-  );
-  assert.deepEqual(
     [theirs.you.correct, theirs.you.fast, theirs.you.dealt, theirs.you.health],
-    [true, false, 20, 75],
+    [true, false, 20, 100],
   );
-  assert.equal(mine.rival.health, 75);
+  assert.deepEqual([mine.you.correct, mine.you.given, mine.you.health], [false, true, 80]);
   assert.equal(mine.you.expected, '2');
-  lobby.receive(lina.id, { t: 'answer', n: 1, value: RIGHT });
-  assert.equal(lina.last('round').n, 1);
+  assert.equal(mine.rival.dealt, 20);
   advance(VERSUS.resultMs);
   assert.equal(lina.last('round').n, 2);
-  lobby.receive(lina.id, { t: 'answer', n: 1, value: RIGHT });
-  lobby.receive(lina.id, { t: 'answer', n: 2, value: WRONG });
-  advance(30000 + VERSUS.graceMs);
-  const second = leo.last('round-result');
+  // The first right answer ends the round at once and beats the slower mage.
+  lobby.receive(leo.id, { t: 'answer', n: 1, value: RIGHT });
+  lobby.receive(lina.id, { t: 'answer', n: 2, value: RIGHT });
+  const fast = lina.last('round-result'),
+    slow = leo.last('round-result');
+  assert.deepEqual([fast.n, fast.you.fast, fast.you.dealt, fast.rival.health], [2, true, 25, 75]);
+  assert.deepEqual([slow.you.beaten, slow.you.given, slow.you.health], [true, false, 75]);
+  lobby.receive(leo.id, { t: 'answer', n: 2, value: RIGHT });
+  assert.equal(leo.last('round-result').you.health, 75);
+  advance(VERSUS.resultMs);
+  // Two misses, or nobody answering in time, cost nothing.
+  lobby.receive(lina.id, { t: 'answer', n: 3, value: WRONG });
+  lobby.receive(leo.id, { t: 'answer', n: 3, value: WRONG });
   assert.deepEqual(
-    [second.you.given, second.you.correct, second.rival.given],
-    [false, false, true],
+    [lina.last('round-result').you.health, lina.last('round-result').rival.health],
+    [80, 75],
   );
-  assert.deepEqual([second.you.health, second.rival.health], [75, 80]);
+  advance(VERSUS.resultMs);
+  advance(30000 + VERSUS.graceMs);
+  const idle = leo.last('round-result');
+  assert.deepEqual([idle.n, idle.you.given, idle.rival.given], [4, false, false]);
 });
 test('duel : victoire aux points de vie, puis retour au salon', () => {
   const { lobby, lina, leo, advance } = duel();
@@ -188,8 +197,8 @@ test('duel : dix manches sans vainqueur donnent une égalité, l’avantage sino
   for (let n = 1; n <= VERSUS.maxRounds; n++) tie.advance(30000 + VERSUS.graceMs + VERSUS.resultMs);
   assert.deepEqual(tie.lina.last('duel-end'), { t: 'duel-end', result: 'draw', reason: 'rounds' });
   const edge = duel();
-  edge.advance(20000);
   edge.lobby.receive(edge.leo.id, { t: 'answer', n: 1, value: RIGHT });
+  edge.advance(VERSUS.resultMs);
   for (let n = 1; n <= VERSUS.maxRounds; n++)
     edge.advance(30000 + VERSUS.graceMs + VERSUS.resultMs);
   assert.equal(edge.leo.last('duel-end').result, 'win');
@@ -214,5 +223,5 @@ test('niveaux bornés et messages inconnus ignorés', () => {
   lobby.receive(lina.id, { t: 'constructor' });
   lobby.receive(lina.id, { t: 'answer', n: 1, value: { hour: 1 } });
   lobby.receive('nobody', { t: 'hello' });
-  assert.equal(leo.last('rival-answered').t, 'rival-answered');
+  assert.equal(leo.last('rival-missed').t, 'rival-missed');
 });

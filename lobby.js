@@ -153,6 +153,7 @@ export class Lobby {
       });
     duel.timer = this.setTimer(() => this.closeRound(duel), longest * 1000 + VERSUS.graceMs);
   }
+  // A round is a race: the first right answer casts the only spell of the round.
   answer(player, { n, value }) {
     const duel = player.duel;
     if (!duel || duel.resolving || n !== duel.round) return;
@@ -163,7 +164,11 @@ export class Lobby {
     const correct = inTime && validateAnswer(side.exercise, value);
     side.answer = { correct, fast: correct && isFast(elapsed, side.limit), given: true };
     const other = duel.sides.find((s) => s !== side);
-    other.player.send({ t: 'rival-answered' });
+    if (correct) {
+      other.answer ??= { correct: false, fast: false, given: false, beaten: true };
+      return this.closeRound(duel);
+    }
+    other.player.send({ t: 'rival-missed' });
     if (other.answer) this.closeRound(duel);
   }
   closeRound(duel) {

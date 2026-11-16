@@ -1,0 +1,3 @@
+magic-learning-quest-srv.jabiru-software.com {
+	reverse_proxy duels:8787
+}

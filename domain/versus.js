@@ -19,11 +19,11 @@ export function publicExercise(exercise) {
 export function isFast(elapsedMs, limitSeconds) {
   return limitSeconds > 0 && elapsedMs <= (limitSeconds * 1000) / 2;
 }
-// Only a right answer hurts the other mage; a mistake simply wastes the round.
+// Only a right answer hurts the other mage; a mistake simply leaves the round to the rival.
 export function damageFor({ correct, fast }) {
   return correct ? (fast ? VERSUS.fastHit : VERSUS.hit) : 0;
 }
-// Both spells land at once, so both mages can fall in the same round.
+// A round is a race, so at most one of the two answers is right.
 export function resolveRound(healthA, healthB, answerA, answerB) {
   return [Math.max(0, healthA - damageFor(answerB)), Math.max(0, healthB - damageFor(answerA))];
 }
