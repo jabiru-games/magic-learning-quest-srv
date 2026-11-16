@@ -1,0 +1,18 @@
+{
+  "name": "magic-learning-quest-srv",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Serveur des duels en ligne de Magic Learning Quest",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test tests/*.test.js",
+    "sync-domain": "node scripts/sync-domain.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
