@@ -29,6 +29,7 @@ ALLOWED_ORIGINS=https://jabiru-games.github.io npm start
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `PORT` | Port d’écoute | `8787` |
+| `HOST` | Adresse d’écoute ; `127.0.0.1` derrière un proxy sur la même machine | toutes |
 | `ALLOWED_ORIGINS` | Origines autorisées, séparées par des virgules ; vide = toutes | vide |
 | `MAX_PLAYERS` | Joueurs connectés au maximum | `200` |
 | `MAX_PER_ADDRESS` | Connexions par adresse IP | `8` |
@@ -41,6 +42,7 @@ Le jeu est servi en HTTPS : le navigateur n’accepte donc qu’une adresse en *
 
 - **`docker-compose.yml` + `Caddyfile`** : le serveur et Caddy, qui obtient le certificat tout seul. Une fois le nom de domaine pointé vers la machine et les ports 80 et 443 ouverts : `cd deploy && docker compose up -d --build`.
 - **`nginx.conf`** : la variante si nginx occupe déjà les ports 80 et 443, avec un certificat certbot.
+- **`apache.conf`** et **`duels.service`** : la variante sans Docker, avec Apache devant et un service systemd utilisateur qui lance Node sur `127.0.0.1:8787`.
 
 Le serveur lit `X-Forwarded-For` pour limiter les connexions par adresse : ne jamais l’exposer directement, seulement derrière le proxy.
 

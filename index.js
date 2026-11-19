@@ -4,6 +4,7 @@ import { Lobby } from './lobby.js';
 
 // Duel server for Magic Learning Quest: one WebSocket per player, no storage.
 const PORT = Number(process.env.PORT) || 8787;
+const HOST = process.env.HOST || undefined;
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
   .split(',')
   .map((origin) => origin.trim())
@@ -76,4 +77,4 @@ setInterval(() => {
   }
 }, 15000).unref();
 
-http.listen(PORT, () => console.log(`Duel server listening on :${PORT}`));
+http.listen(PORT, HOST, () => console.log(`Duel server listening on ${HOST ?? ''}:${PORT}`));
