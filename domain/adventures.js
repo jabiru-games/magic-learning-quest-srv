@@ -33,11 +33,80 @@ export function journeyFor(xp = 0) {
     remaining: LEVEL_XP - (total % LEVEL_XP),
   };
 }
+// Each level keeps its own stars: one per difficulty beaten (1, 2 then 3 stars).
+// `cursor` says which level is being played and at which difficulty, in the XP scale
+// read by journeyFor: (star - 1) × 2000 + level × 100 + XP already won on that level.
+// `xp` stays the total ever earned. Saves from before per-level stars have neither
+// `cursor` nor `stars`: both are then read from the XP, which followed that same scale.
+const LAST = LEVELS_PER_STAR - 1;
+export function cursorOf(adventure) {
+  return adventure.cursor ?? adventure.xp ?? 0;
+}
+export function starsFromXP(xp) {
+  const journey = journeyFor(xp);
+  return Array.from({ length: LEVELS_PER_STAR }, (_, index) =>
+    journey.complete ? MAX_STARS : journey.stars + Number(index < journey.stageIndex),
+  );
+}
+export function starsOf(adventure) {
+  return adventure.stars ?? starsFromXP(cursorOf(adventure));
+}
+/** Stars of the whole adventure: the difficulty beaten on every level. */
+export function adventureStars(adventure) {
+  return Math.min(...starsOf(adventure));
+}
+/** Index of the first level never beaten, or of the last level once all are. */
+export function frontierOf(stars) {
+  const index = stars.indexOf(0);
+  return index === -1 ? LAST : index;
+}
+export function levelUnlocked(stars, index) {
+  return index === 0 || stars[index] > 0 || stars[index - 1] > 0;
+}
+/** Where the cursor stands to play `index` at the first difficulty not beaten yet. */
+export function runCursor(stars, index, partial = 0) {
+  return (
+    (Math.min(MAX_STARS, stars[index] + 1) - 1) * XP_PER_STAR +
+    index * LEVEL_XP +
+    Math.min(LEVEL_XP - 1, partial)
+  );
+}
+/** Stars and cursor once the level under `cursor` is beaten, `carry` XP spilling over. */
+export function afterLevelWon(stars, cursor, carry = 0, partial = []) {
+  const run = journeyFor(cursor);
+  const next = [...stars];
+  if (run.complete) return { stars: next, cursor, index: LAST };
+  next[run.stageIndex] = Math.max(next[run.stageIndex], run.targetStar);
+  if (next.every((count) => count === MAX_STARS))
+    return { stars: next, cursor: MAX_STARS * XP_PER_STAR + carry, index: LAST };
+  const index = run.stageIndex < LAST ? run.stageIndex + 1 : next.indexOf(Math.min(...next));
+  return { stars: next, cursor: runCursor(next, index, (partial[index] ?? 0) + carry), index };
+}
+/** Puts the mage on a level chosen on the map, at its next difficulty. */
+export function selectLevel(state, mode, index) {
+  if (!ADVENTURE_MODES.includes(mode)) throw new Error('Aventure inconnue');
+  const previous = adventureFor(state, mode);
+  const stars = starsOf(previous);
+  if (!Number.isInteger(index) || index < 0 || index > LAST || !levelUnlocked(stars, index))
+    throw new Error('Niveau verrouillé');
+  const run = journeyFor(cursorOf(previous));
+  if (!run.complete && run.stageIndex === index) return state;
+  const next = structuredClone(state);
+  const progress = next.adventures[mode];
+  progress.stars = stars;
+  progress.partial = [...(previous.partial ?? Array(LEVELS_PER_STAR).fill(0))];
+  if (!run.complete) progress.partial[run.stageIndex] = cursorOf(previous) % LEVEL_XP;
+  progress.cursor = runCursor(stars, index, progress.partial[index]);
+  progress.partial[index] = 0;
+  return next;
+}
 export function adventureFor(state, mode) {
   return (
     state.adventures?.[mode] ?? {
       ...freshAdventure(),
       xp: state.xp ?? 0,
+      cursor: state.xp ?? 0,
+      stars: starsFromXP(state.xp ?? 0),
       score: state.score ?? 0,
       streak: state.streak ?? 0,
       bestStreak: state.bestStreak ?? 0,
@@ -46,7 +115,7 @@ export function adventureFor(state, mode) {
   );
 }
 export function difficultyForAdventure(mode, settings, adventure) {
-  const journey = journeyFor(adventure.xp),
+  const journey = journeyFor(cursorOf(adventure)),
     star = journey.targetStar,
     mastery = adventure.cycleCorrect;
   let level;

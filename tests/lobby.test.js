@@ -225,3 +225,70 @@ test('niveaux bornés et messages inconnus ignorés', () => {
   lobby.receive('nobody', { t: 'hello' });
   assert.equal(leo.last('rival-missed').t, 'rival-missed');
 });
+
+test('salon privé : code à quatre chiffres, joueurs visibles seulement dans le même salon', () => {
+  const { lobby, join } = arena();
+  const lina = join('Lina'),
+    leo = join('Léo'),
+    zoe = join('Zoé');
+  const names = (who) => who.last('players').list.map((p) => p.name);
+  assert.deepEqual(names(lina), ['Léo', 'Zoé']);
+
+  lobby.receive(lina.id, { t: 'room-create' });
+  const code = lina.last('room').code;
+  assert.match(code, /^\d{4}$/);
+  assert.deepEqual(names(lina), []);
+  assert.deepEqual(names(zoe), ['Léo'], 'un salon privé disparaît de la liste publique');
+
+  lobby.receive(zoe.id, { t: 'challenge', to: lina.id, mode: 'math' });
+  assert.equal(zoe.last('error').code, 'gone', 'pas de défi d’un salon à l’autre');
+
+  lobby.receive(leo.id, { t: 'room-join', code });
+  assert.equal(leo.last('room').code, code);
+  assert.deepEqual(names(lina), ['Léo']);
+  assert.deepEqual(names(leo), ['Lina']);
+  assert.deepEqual(names(zoe), []);
+
+  lobby.receive(zoe.id, { t: 'room-create' });
+  assert.notEqual(zoe.last('room').code, code, 'deux salons n’ont jamais le même code');
+
+  lobby.receive(leo.id, { t: 'challenge', to: lina.id, mode: 'math' });
+  lobby.receive(lina.id, { t: 'reply', accept: true });
+  assert.equal(lina.last('duel-start').rival.name, 'Léo');
+  lobby.receive(leo.id, { t: 'room-leave' });
+  assert.equal(leo.last('room').code, code, 'on ne change pas de salon pendant un duel');
+});
+
+test('salon privé : code inconnu refusé, essais limités, salon plein, retour au salon public', () => {
+  const { lobby, join } = arena();
+  const lina = join('Lina'),
+    leo = join('Léo');
+  lobby.receive(lina.id, { t: 'room-create' });
+  const code = lina.last('room').code;
+  for (const wrong of ['0000', 'abcd', 12, undefined]) {
+    lobby.receive(leo.id, { t: 'room-join', code: wrong });
+    assert.equal(leo.last('error').code, 'room');
+  }
+  for (let i = 0; i < 4; i++) lobby.receive(leo.id, { t: 'room-join', code: '9999' });
+  lobby.receive(leo.id, { t: 'room-join', code });
+  assert.equal(leo.last('error').code, 'room-tries', 'après huit erreurs, plus d’essai');
+  assert.equal(leo.last('room'), undefined);
+
+  const friends = Array.from({ length: 7 }, (_, i) => join(`Ami ${i}`));
+  for (const friend of friends) lobby.receive(friend.id, { t: 'room-join', code });
+  assert.equal(friends.at(-1).last('room').code, code);
+  const late = join('Tard');
+  lobby.receive(late.id, { t: 'room-join', code });
+  assert.equal(late.last('error').code, 'room-full');
+
+  lobby.receive(lina.id, { t: 'room-leave' });
+  assert.equal(lina.last('room').code, null);
+  assert.deepEqual(
+    lina.last('players').list.map((p) => p.name),
+    ['Léo', 'Tard'],
+  );
+  for (const friend of friends) lobby.disconnect(friend.id);
+  const again = join('Nouveau');
+  lobby.receive(again.id, { t: 'room-join', code });
+  assert.equal(again.last('error').code, 'room', 'un salon vide n’existe plus');
+});

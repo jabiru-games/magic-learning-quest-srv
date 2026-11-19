@@ -5,6 +5,7 @@ Service des **duels en ligne** de [Magic Learning Quest](https://github.com/jabi
 ## Ce qu’il fait
 
 - **Salon** : chaque joueur connecté voit les autres (nom du mage et apparence) et sait qui est déjà en duel.
+- **Salons privés** : un joueur crée un code à quatre chiffres, ses amis le saisissent ; on ne voit et on ne défie que les joueurs de son salon (8 au plus). Sans code, tout le monde est dans le salon public. Un salon disparaît quand son dernier joueur le quitte.
 - **Invitations** : défier, accepter, refuser, annuler ; une invitation sans réponse expire après 20 secondes.
 - **Duels** : le serveur tire les questions, vérifie les réponses et calcule les points de vie. Une question envoyée à un joueur ne contient jamais sa solution.
 - **Rien n’est conservé** : ni messagerie, ni historique. Tout disparaît à la fermeture de la connexion.
@@ -61,12 +62,16 @@ Messages JSON, le type est dans `t`.
 | → serveur | `hello` | `name`, `avatar`, `levels: { clock, math }` |
 | ← | `welcome` | `id` du joueur |
 | ← | `players` | `list` des autres joueurs : `id`, `name`, `avatar`, `busy` |
+| → | `room-create` | crée un salon privé et y entre |
+| → | `room-join` | `code` (quatre chiffres) |
+| → | `room-leave` | revient au salon public |
+| ← | `room` | `code` du salon rejoint, `null` pour le salon public |
 | → | `challenge` | `to` (id), `mode` (`clock` ou `math`) |
 | ← | `pending` / `invite` | joueur défié (`to`) / joueur qui défie (`from`), `mode` |
 | → | `reply` | `accept` (booléen) |
 | → | `cancel` | retire son invitation |
 | ← | `invite-closed` | `reason` : `declined`, `cancelled`, `timeout`, `gone` |
-| ← | `error` | `code` : `busy`, `gone`, `mode` |
+| ← | `error` | `code` : `busy`, `gone`, `mode`, `room` (code inconnu), `room-full`, `room-tries` |
 | ← | `duel-start` | `mode`, `rival`, `health` |
 | ← | `round` | `n`, `of`, `exercise` (sans la réponse, avec `limit` en secondes) |
 | → | `answer` | `n`, `value` (`"42"` ou `{ hour, minute }`) |
@@ -75,7 +80,7 @@ Messages JSON, le type est dans `t`.
 | → | `leave` | abandonne le duel |
 | ← | `duel-end` | `result` : `win`, `loss`, `draw` ; `reason` : `health`, `rounds`, `forfeit` |
 
-Protections : messages de 2 Ko au plus, 60 messages par 10 secondes et par connexion, noms limités à 18 caractères, apparence ramenée aux options connues du jeu.
+Protections : messages de 2 Ko au plus, 60 messages par 10 secondes et par connexion, noms limités à 18 caractères, huit codes de salon erronés au plus par connexion, apparence ramenée aux options connues du jeu.
 
 ## Développement
 

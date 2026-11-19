@@ -1,5 +1,9 @@
 import {
   adventureFor,
+  afterLevelWon,
+  cursorOf,
+  frontierOf,
+  starsOf,
   journeyFor,
   freshAdventure,
   MAX_HEALTH,
@@ -45,6 +49,11 @@ export function position(xp) {
 export function level(xp) {
   return journeyFor(xp).level;
 }
+/** Rewards of every level reached so far, from the stars of each level. */
+export function rewardsFor(stars) {
+  const reached = stars.every((count) => count > 0) ? STAGES.length : frontierOf(stars);
+  return STAGES.filter((s) => s.reward && s.index <= reached).map((s) => s.reward);
+}
 export function unlockedRewards(xp) {
   return STAGES.filter((s) => s.reward && (xp >= 2000 || s.index <= position(xp))).map(
     (s) => s.reward,
@@ -70,7 +79,9 @@ export function recordAnswer(
 ) {
   const previous = adventureFor(state, exercise.mode);
   if (previous.health === 0) throw new Error('Recommence le niveau avant de répondre');
-  const before = journeyFor(previous.xp);
+  const cursorBefore = cursorOf(previous);
+  const before = journeyFor(cursorBefore);
+  const starsBefore = starsOf(previous);
   const result = scoreAnswer({
     correct,
     elapsed,
@@ -84,11 +95,22 @@ export function recordAnswer(
   progress.score = previous.score + result.score;
   progress.streak = result.streak;
   progress.bestStreak = Math.max(previous.bestStreak, result.streak);
-  const after = journeyFor(progress.xp);
-  const starEarned = after.stars > before.stars;
-
-  const newStage = starEarned || after.stageIndex > before.stageIndex;
-  const levelWon = Math.floor(progress.xp / XP_PER_STAGE) > Math.floor(previous.xp / XP_PER_STAGE);
+  const reached = cursorBefore + result.xp;
+  const levelWon = Math.floor(reached / XP_PER_STAGE) > Math.floor(cursorBefore / XP_PER_STAGE);
+  progress.stars = starsBefore;
+  progress.partial = [...(previous.partial ?? starsBefore.map(() => 0))];
+  progress.cursor = reached;
+  if (levelWon && !before.complete) {
+    const won = afterLevelWon(starsBefore, cursorBefore, reached % XP_PER_STAGE, progress.partial);
+    progress.stars = won.stars;
+    progress.cursor = won.cursor;
+    progress.partial[before.stageIndex] = 0;
+    progress.partial[won.index] = 0;
+  }
+  const after = journeyFor(progress.cursor);
+  // A star of the adventure is earned when every level has been beaten once more.
+  const starEarned = Math.min(...progress.stars) > Math.min(...starsBefore);
+  const newStage = levelWon && !before.complete;
   progress.cycleCorrect = starEarned ? 0 : previous.cycleCorrect + Number(correct);
   progress.health = correct
     ? levelWon
@@ -101,7 +123,7 @@ export function recordAnswer(
   const defeated = progress.health === 0;
   progress.defeats = (previous.defeats ?? 0) + Number(defeated);
 
-  progress.rewards = unlockedRewards(progress.xp);
+  progress.rewards = rewardsFor(progress.stars);
   next.xp = next.adventures.clock.xp + next.adventures.math.xp;
   next.unlocksXP = Math.max(next.unlocksXP ?? 0, next.xp);
   next.score = next.adventures.clock.score + next.adventures.math.score;
@@ -139,7 +161,7 @@ export function recordAnswer(
     defeated,
     health: progress.health,
     starEarned,
-    stars: after.stars,
+    stars: Math.min(...progress.stars),
     completed: after.complete,
   };
 }

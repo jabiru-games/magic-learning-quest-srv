@@ -16,6 +16,9 @@ import {
 } from './domain/versus.js';
 
 const MODES = ['clock', 'math'];
+// A private room is reached with a four-digit code shared between friends.
+const ROOM_SIZE = 8;
+const ROOM_TRIES = 8;
 const level = (value, max) => Math.max(0, Math.min(max, Math.trunc(Number(value)) || 0));
 
 // Keeps the list of connected players, their invitations and their duels.
@@ -35,7 +38,15 @@ export class Lobby {
     this.nextId = 1;
   }
   connect(send) {
-    const player = { id: `p${this.nextId++}`, send, named: false, invite: null, duel: null };
+    const player = {
+      id: `p${this.nextId++}`,
+      send,
+      named: false,
+      invite: null,
+      duel: null,
+      room: null,
+      wrongCodes: 0,
+    };
     this.players.set(player.id, player);
     return player.id;
   }
@@ -57,6 +68,9 @@ export class Lobby {
       cancel: this.cancel,
       answer: this.answer,
       leave: this.leave,
+      'room-create': this.roomCreate,
+      'room-join': this.roomJoin,
+      'room-leave': this.roomLeave,
     }[message.t];
     if (handler) handler.call(this, player, message);
   }
@@ -68,8 +82,44 @@ export class Lobby {
     for (const player of named)
       player.send({
         t: 'players',
-        list: named.filter((p) => p !== player).map((p) => this.card(p)),
+        list: named.filter((p) => p !== player && p.room === player.room).map((p) => this.card(p)),
       });
+  }
+  // Rooms: players only see, and can only challenge, those sharing their room.
+  // Without a code everyone is in the public room; a room lives while someone is in it.
+  roomMembers(code) {
+    return [...this.players.values()].filter((p) => p.room === code);
+  }
+  enterRoom(player, code) {
+    this.dropInvite(player, 'gone');
+    player.room = code;
+    player.send({ t: 'room', code });
+    this.broadcastPlayers();
+  }
+  roomCreate(player) {
+    if (!player.named || player.duel) return;
+    const taken = (code) => this.roomMembers(code).some((p) => p !== player);
+    let number = Math.min(8999, Math.floor(this.random() * 9000));
+    for (let tries = 0; taken(String(1000 + number)) && tries < 9000; tries++)
+      number = (number + 1) % 9000;
+    const code = String(1000 + number);
+    this.enterRoom(player, code);
+  }
+  roomJoin(player, { code }) {
+    if (!player.named || player.duel) return;
+    if (player.wrongCodes >= ROOM_TRIES) return player.send({ t: 'error', code: 'room-tries' });
+    const members = typeof code === 'string' && /^\d{4}$/.test(code) ? this.roomMembers(code) : [];
+    if (!members.length) {
+      player.wrongCodes++;
+      return player.send({ t: 'error', code: 'room' });
+    }
+    if (members.includes(player)) return player.send({ t: 'room', code });
+    if (members.length >= ROOM_SIZE) return player.send({ t: 'error', code: 'room-full' });
+    this.enterRoom(player, code);
+  }
+  roomLeave(player) {
+    if (!player.named || player.duel || player.room === null) return;
+    this.enterRoom(player, null);
   }
   hello(player, { name, avatar, levels }) {
     player.avatar = normalizeAvatar({ ...avatar, name }, Number.MAX_SAFE_INTEGER);
@@ -83,7 +133,8 @@ export class Lobby {
     const rival = this.players.get(to);
     if (!player.named || player.duel || player.invite) return;
     if (!MODES.includes(mode)) return player.send({ t: 'error', code: 'mode' });
-    if (!rival?.named || rival === player) return player.send({ t: 'error', code: 'gone' });
+    if (!rival?.named || rival === player || rival.room !== player.room)
+      return player.send({ t: 'error', code: 'gone' });
     if (rival.duel || rival.invite) return player.send({ t: 'error', code: 'busy' });
     const invite = { from: player, to: rival, mode };
     invite.timer = this.setTimer(() => this.dropInvite(player, 'timeout'), VERSUS.inviteMs);
