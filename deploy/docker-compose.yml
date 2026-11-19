@@ -6,7 +6,7 @@ services:
     build: ..
     restart: unless-stopped
     environment:
-      ALLOWED_ORIGINS: https://stevencayla.github.io
+      ALLOWED_ORIGINS: https://jabiru-games.github.io
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped

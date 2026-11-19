@@ -1,6 +1,6 @@
 # Magic Learning Quest · serveur de duels
 
-Service des **duels en ligne** de [Magic Learning Quest](https://github.com/stevenCayla/magic-learning-quest) : il tient la liste des joueurs connectés, transmet les invitations et arbitre les duels. C’est un petit serveur Node.js (WebSocket), sans base de données ni compte.
+Service des **duels en ligne** de [Magic Learning Quest](https://github.com/jabiru-games/magic-learning-quest) : il tient la liste des joueurs connectés, transmet les invitations et arbitre les duels. C’est un petit serveur Node.js (WebSocket), sans base de données ni compte.
 
 ## Ce qu’il fait
 
@@ -19,11 +19,11 @@ Chaque mage a 100 PV et chaque manche est une **course**. Chacun reçoit une que
 # Avec Docker
 docker build -t mlq-duels .
 docker run -d --restart unless-stopped -p 127.0.0.1:8787:8787 \
-  -e ALLOWED_ORIGINS=https://stevencayla.github.io mlq-duels
+  -e ALLOWED_ORIGINS=https://jabiru-games.github.io mlq-duels
 
 # Sans Docker (Node.js 20 ou plus)
 npm ci --omit=dev
-ALLOWED_ORIGINS=https://stevencayla.github.io npm start
+ALLOWED_ORIGINS=https://jabiru-games.github.io npm start
 ```
 
 | Variable | Rôle | Défaut |
